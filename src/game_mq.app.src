@@ -1,0 +1,18 @@
+{application, game_mq,
+ [{description, "An game rabbit mq server."},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, { game_mq_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    lager,
+    amqp_client
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
