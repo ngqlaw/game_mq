@@ -18,7 +18,6 @@
   ,send/2
   ,stop/1
 ]).
--export([consume/3]).
 
 %% 启动发送进程
 -spec (start_sender(term(), list()) -> start_res()).
@@ -51,8 +50,7 @@ send(Queue, Msg) ->
   case game_mq_sup:get_sender(Queue) of
     undefined -> false;
     Pid -> 
-      gen_server:cast(Pid, {send, Msg}),
-      true
+      gen_server:call(Pid, {send, Msg})
   end.
 
 %% 停止服务
@@ -60,10 +58,6 @@ send(Queue, Msg) ->
 stop(Queue) ->
   game_mq_sup:stop(Queue),
   ok.
-
-%% 测试
-consume(Queue, Info, Meta) ->
-  lager:info("[~p]handle msg ~p:~p", [Queue, Info, Meta]).
 
 %%====================================================================
 %% Internal functions

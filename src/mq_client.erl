@@ -80,10 +80,11 @@ ack(Channel, Tag) ->
 
 %% 关闭
 -spec (stop(pid(), pid()) -> ok).
-stop(Conn, Channel) ->
+stop(Conn, Channel) when is_pid(Conn) andalso is_pid(Channel) ->
   amqp_channel:close(Channel),
   amqp_connection:close(Conn),
-  ok.
+  ok;
+stop(_, _) -> ok.
 
 %%%===================================================================
 %%% Internal functions

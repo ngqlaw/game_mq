@@ -89,6 +89,21 @@ init([Queue, Args]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_call({send, Payload}, _From, #state{
+    channel = Channel, 
+    queue = Queue
+  } = State) when is_pid(Channel) ->
+  Reply = case catch mq_client:send(Channel, Payload, [
+      {delivery_mode, 2}, 
+      {exchange, <<"">>}, 
+      {routing_key, Queue}
+    ]) of
+    ok -> true;
+    _ -> false
+  end,
+  {reply, Reply, State};
+handle_call({send, _Payload}, _From, State) ->
+  {reply, false, State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -103,15 +118,6 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({send, Payload}, #state{channel = Channel, queue = Queue} = State) ->
-  Opt = [{delivery_mode, 2}, {exchange, <<"">>}, {routing_key, Queue}],
-  case mq_client:send(Channel, Payload, Opt) of
-    ok ->
-      skip;
-    Error ->
-      lager:error("send msg[~p] fail:~p", [Payload, Error])
-  end,
-  {noreply, State};
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -132,17 +138,11 @@ handle_cast(_Request, State) ->
 handle_info(reconnect, State) ->
   NewState = rabbitmq_connect(State),
   {noreply, NewState};
-handle_info({'DOWN', Ref, process, _pid, _reason}, #state{ref = Ref, queue = Queue} = State) ->
-  lager:info("[~p] disconnect, trying to reconnect...", [Queue]),
+handle_info({'DOWN', Ref, process, _pid, _reason}, #state{ref = Ref} = State) ->
   NewState = rabbitmq_connect(State),
   {noreply, NewState};
 handle_info(Info, State) ->
-  case mq_client_receive:handle(Info) of
-    unknown ->
-      lager:debug("unexpected msg: ~p", [Info]);
-    _ ->
-      skip
-  end,
+  mq_client_receive:handle(Info),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -185,14 +185,14 @@ rabbitmq_connect(#state{queue = Queue, arg = Arg, auto_ref = OldTimer} = State) 
       Ref = erlang:monitor(process, Conn),
       {ok, Channel} = mq_client:start_channel(Conn),
       {ok, _} = mq_client:declare_queue(Channel, [{queue, Queue}, {durable, true}]),
-      lager:debug("[#{queue}] queue connect succeed!"),
       State#state{connection = Conn, channel = Channel, ref = Ref};
-    {error, Error} ->
-      lager:debug("[#{queue}] queue connect fail:~p", [Error]),
+    {error, _Error} ->
       Timer = reset_timer(OldTimer),
       State#state{auto_ref = Timer}
   end.
 
 reset_timer(Timer) when is_reference(Timer) ->
   erlang:cancel_timer(Timer),
+  erlang:send_after(10000, self(), reconnect);
+reset_timer(_) ->
   erlang:send_after(10000, self(), reconnect).
