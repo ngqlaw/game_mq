@@ -129,9 +129,25 @@ handle_info({'DOWN', Ref, process, _pid, _reason}, #state{ref = Ref} = State) ->
   {noreply, NewState};
 handle_info(Info, #state{handler = Handler, queue = Queue, channel = Channel} = State) ->
   case mq_client_receive:handle(Info) of
-    {msg, Content, #{delivery_tag := DeliveryTag} = Meta} ->
+    {msg, Content, #{
+      exchange := Exchange,
+      delivery_tag := DeliveryTag, 
+      reply_to := ReplyTo, 
+      correlation_id := CorrelationId
+    } = Meta} ->
       mq_client:ack(Channel, DeliveryTag),
-      Handler:consume(Queue, Content, Meta);
+      case Handler:consume(Queue, Content, Meta) of
+        ok -> 
+          ok;
+        {reply, Reply} ->
+          ok = mq_client:sync_send(Channel, Reply, [
+            {delivery_mode, 1}, 
+            {exchange, Exchange},
+            {routing_key, ReplyTo},
+            {correlation_id, CorrelationId}
+          ]),
+          ok
+      end;
     _ ->
       skip
   end,

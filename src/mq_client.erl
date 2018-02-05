@@ -13,6 +13,7 @@
   ,declare_exchange/2
   ,declare_queue/2
   ,send/3
+  ,sync_send/3
   ,subscribe/3
   ,ack/2
   ,stop/2
@@ -63,6 +64,14 @@ send(Channel, Payload, Opt) when is_pid(Channel) andalso is_binary(Payload) anda
   Props = normalize_publish_basic_options(Opt, #'P_basic'{}),
   Msg = #amqp_msg{props = Props, payload = Payload},
   amqp_channel:cast(Channel, Publish, Msg).
+
+%% 发送消息(等待返回)
+-spec (sync_send(Channel :: pid(), Payload :: binary(), Opt :: list()) -> ok | term()).
+sync_send(Channel, Payload, Opt) when is_pid(Channel) andalso is_binary(Payload) andalso is_list(Opt) ->
+  Publish = normalize_publish_options(Opt, #'basic.publish'{}),
+  Props = normalize_publish_basic_options(Opt, #'P_basic'{}),
+  Msg = #amqp_msg{props = Props, payload = Payload},
+  amqp_channel:call(Channel, Publish, Msg).
 
 %% 订阅消息
 -spec (subscribe(Channel :: pid(), Consumer :: pid(), Opt :: list()) -> {ok, term()} | {error, term()}).
